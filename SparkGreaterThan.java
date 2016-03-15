@@ -1,6 +1,11 @@
+package sparkjava;
+
+import java.util.Arrays;
+
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.api.java.function.FlatMapFunction;
 import org.apache.spark.api.java.function.Function;
 
 /** Ce JAR récupère un fichier csv et opére plusieurs traitements.<br/>
@@ -13,12 +18,15 @@ import org.apache.spark.api.java.function.Function;
 * Des marqueurs de temps permettent de quantifier le temps pris pour ces opérations. Comme attendu, les opérations de mapping sont négligeables (qq millisecondes) <br/>
 * Les traitements sont effectués lors des 'count' et ces derniers sont de l'ordre de 30 sec sur Openstack. <br/>
 * L'enregistrement final du JavaRDD en base dure environ 80 secondes.<br/>
-* La récupération des valeurs 3 et 55 n'est pas bonne, les résultats attendus ne sont pas les bons.<br/>
+* Résultats attendus - <br/>
+* Valeur 1 Objectid  > 433327840000000 : 801171<br/>
+* Valeur 3 ra_ps > 90° : 752629<br/>
+* Valeur 55 ue1_sg > 0.17 & < 0.18 : 17360<br/>
+* <br/>
 *  
 * @author bastien doreau LIMOS
 */
-public class SparkGreaterThan {
-
+public class SparkGreaterThan2 {
 	private static JavaSparkContext context;
 
 	@SuppressWarnings("serial")
@@ -26,7 +34,7 @@ public class SparkGreaterThan {
 		
 		
 	    SparkConf conf = new SparkConf().setAppName("sparkgreaterthan"); //.setMaster("local");
-	    
+
 	    context = new JavaSparkContext(conf);
 	    
 	    //////////////////////////////////////////////////////////////////////////////////////
@@ -57,33 +65,19 @@ public class SparkGreaterThan {
 		//////////////////////////////////////////////////////////////
 	    // Récupération de le 55e valeur de chaque ligne (Long) et 
 	    // enregistrement dans un JavaRDD<Long>
-		JavaRDD<Long> map1job2=file.map(new Function<String, Long>() {
-			@Override
-			public Long call(String s) throws Exception {
-				int nb_column=55;
-				
-				int index=0;
-				
-				
-				// Pour chaque String (ligne) on supprime 55 fois
-				// les valeurs suivies d'une virgule
-				for(int i=0; i< nb_column; i++)
-				{
-					index=s.indexOf(",");
-					s=s.substring(index, s.length());
-				}
-				
-				// On récupère la valeur
-				int index2=s.indexOf(",");
-				s=s.substring(0,index2);
-				
-				if (s.equals("")) {s="0";}
-				
-				return Long.parseLong(s);
-			}		
-		});
-		// Le résultat JavaRDD<Long> map1job2 est mis en cache
+		JavaRDD<Double> map1job2 = file.map(new Function<String, Double>() {
+			  public Double call(String s) { 
+				  String[] fields=s.split(",");
+				  if (fields[54].equals(""))
+				  {fields[54]="-1";}
+				  Double goodVal=Double.parseDouble(fields[54]);
+				  
+				  return goodVal; 
+				  }
+			});
 		map1job2.cache();
+		// Le résultat JavaRDD<Long> map1job2 est mis en cache
+		
 		
 		
 		//////////////////////////////////////////////////////////////
@@ -97,22 +91,24 @@ public class SparkGreaterThan {
 			}			
 		});
 		
-		
+	
 		
 		//////////////////////////////////////////////////////////////
 	    // Récupération de le 3e valeur de chaque ligne (Long) et 
 	    // enregistrement dans un JavaRDD<Long>
-		JavaRDD<Long> map1job3=file.map(new Function<String, Long>(){
-			@Override
-			public Long call(String s) throws Exception {
-				s=s.substring(s.indexOf(","));
-				s=s.substring(s.indexOf(","));
-				s=s.substring(0,s.indexOf(","));
-				
-				if (s.equals("")) {s="-1";}
-				return Long.parseLong(s);
-			}			
-		});
+		
+		JavaRDD<Double> map1job3 = file.map(new Function<String, Double>() {
+			  public Double call(String s) { 
+				  String[] fields=s.split(",");
+				  if (fields[2].equals(""))
+				  {fields[2]="-1";}
+				  Double goodVal=Double.parseDouble(fields[2]);
+				  
+				  return goodVal; 
+				  }
+			});
+		
+
 		
 		long endmaps=System.currentTimeMillis();
 		long timeEndMaps= endmaps-start;
@@ -144,10 +140,10 @@ public class SparkGreaterThan {
 		///////////////////////////////////////////////////
 		// Filtrage de la 3e valeur -> toutes les valeurs nulles
 		// sont récupérées 
-		JavaRDD<Long> map2job2=map1job3.filter(new Function<Long,Boolean>(){
+		JavaRDD<Double> map2job2=map1job3.filter(new Function<Double,Boolean>(){
 			@Override
-			public Boolean call (Long i){
-				if (i==-1) return true;
+			public Boolean call (Double i){
+				if (i>90) return true;
 				else return false;
 			}
 		});
@@ -155,9 +151,9 @@ public class SparkGreaterThan {
 		///////////////////////////////////////////////////
 		// Filtrage de la 55e valeur -> toutes les valeurs entre une 
 		// valeur min et une valeur max sont récupérées
-		JavaRDD<Long> map3job2=map1job2.filter(new Function<Long, Boolean>() {
+		JavaRDD<Double> map3job2=map1job2.filter(new Function<Double, Boolean>() {
 			@Override
-			public Boolean call(Long i) throws Exception {
+			public Boolean call(Double i) throws Exception {
 				if (i>0.17 && i<0.18) return true;
 				else return false;
 			}
@@ -209,9 +205,9 @@ public class SparkGreaterThan {
 		
 
 	   // Affichage
-	   System.out.println("Nb lines field 1 > ... :" +nbVal1);
-	   System.out.println("Nb lines field 3=null :" +nbVal3);
-	   System.out.println("Nb lines field 55 >0.17 :" +nbVal55);
+	   System.out.println("Nb lines Objectid > 433327840000000 :" +nbVal1);
+	   System.out.println("Nb lines ra_ps > 90° :" +nbVal3);
+	   System.out.println("Nb lines ue1_sg >0.17 & <0.18:" +nbVal55);
 	   System.out.println("Spark user :" +user); 
 	   System.out.println("\n"); 
 	   System.out.println("timeTotal " +timeTotal/1000+" sec"); 
@@ -221,8 +217,6 @@ public class SparkGreaterThan {
 	   System.out.println("timeCount4 "+timeCount3/1000+" sec");
 	   System.out.println("timeCount55 "+timeCount55/1000+" sec");
 	   System.out.println("timeSaveFile "+timeSaveJavaRDD/1000+" sec");
-	  
-	   
 	   
 
 	   context.stop();
